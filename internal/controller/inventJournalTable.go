@@ -11,18 +11,17 @@ import (
 
 func (c *Controller) UpdateInventJournalTable(ctx *gin.Context) {
 
-
 	slogger := config.Config.LOGGER
 
 	_, err := uuid.Parse(ctx.Query("token"))
-	if err != nil{
+	if err != nil {
 		response.ResponseBadRequest("Неправильный формат токена", ctx)
 		return
 	}
 
 	val, err := model.GetCREATEDDATETIMEByToken(ctx.Query("token"))
 
-	if err != nil{
+	if err != nil {
 		slogger.Error(err)
 		response.ResponseInternalServerError("Данный токен не существует", ctx)
 		return
@@ -35,22 +34,27 @@ func (c *Controller) UpdateInventJournalTable(ctx *gin.Context) {
 	}
 
 	t, err := time.Parse("2006-01-02 15:04:05", time.Now().Format("2006-01-02 15:04:05"))
-	if err != nil{
+	if err != nil {
 		slogger.Error(err)
 		response.ResponseInternalServerError("Внутренняя ошибка сервера", ctx)
 		return
 	}
 
-
-	if val.APPROVED==1 {
+	if val.APPROVED == 1 {
 		slogger.Info("Данный % журнал был уже утвержден ранее.")
-		response.ResponseOkRequest("Журнал №"+ val.JOURNALID + " был уже утвержден ранее.", ctx)
+		response.ResponseOkRequest("Журнал №"+val.JOURNALID+" был уже утвержден ранее.", ctx)
 		return
 	}
 
-	if t.Sub(val.GUIDDATETIME).Hours() > 24  {
-		slogger.Info("Время действия ссылки для проставления подписи журнала №"+ val.JOURNALID + " истекло. Запросите новое подтверждение подписи.")
-		response.ResponseOkRequest("Время действия ссылки для проставления подписи журнала №"+ val.JOURNALID + " истекло. Запросите новое подтверждение подписи.", ctx)
+	dayOfMail, err := model.GetDayOfMail()
+	if err != nil {
+		slogger.Info(err)
+		dayOfMail.DayOfMail = 1
+	}
+
+	if t.Sub(val.GUIDDATETIME).Hours() > float64(24*dayOfMail.DayOfMail) {
+		slogger.Info("Время действия ссылки для проставления подписи журнала №" + val.JOURNALID + " истекло. Запросите новое подтверждение подписи.")
+		response.ResponseOkRequest("Время действия ссылки для проставления подписи журнала №"+val.JOURNALID+" истекло. Запросите новое подтверждение подписи.", ctx)
 		return
 	}
 
@@ -62,8 +66,25 @@ func (c *Controller) UpdateInventJournalTable(ctx *gin.Context) {
 		return
 	}
 
-	if code == 200{
-		response.ResponseOkRequest("Журнал №"+ val.JOURNALID + " успешно подтвержден", ctx)
+	if val.JournalIdCompTrans != "" {
+		jur := val.JOURNALID
+		val.JOURNALID = val.JournalIdCompTrans
+		code, err = model.UpdateInventJournal(val)
+
+		if err != nil {
+			slogger.Error(err)
+			response.ResponseInternalServerError("Внутренняя ошибка сервера", ctx)
+			return
+		}
+
+		if code == 200 {
+			response.ResponseOkRequest("Журналы №"+jur+"| №"+val.JournalIdCompTrans+" успешно подтверждены", ctx)
+		}
+		return
+	}
+
+	if code == 200 {
+		response.ResponseOkRequest("Журнал №"+val.JOURNALID+" успешно подтвержден", ctx)
 	}
 
 	//if err != nil {

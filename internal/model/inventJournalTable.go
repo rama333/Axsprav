@@ -8,18 +8,22 @@ import (
 )
 
 type StoryToken struct {
-	GUID string `db:"GUIDTOKEN"`
-	GUIDDATETIME time.Time `db:"GUIDDATETIME"`
-	JOURNALID string `db:"JOURNALID"`
-	TYPEOPERATION string `db:"TYPEOPERATION"`
-	APPROVED int `db:"APPROVED"`
+	GUID          string    `db:"GUIDTOKEN"`
+	GUIDDATETIME  time.Time `db:"GUIDDATETIME"`
+	JOURNALID     string    `db:"JOURNALID"`
+	TYPEOPERATION string    `db:"TYPEOPERATION"`
+	APPROVED      int       `db:"APPROVED"`
 }
 
-func GetCREATEDDATETIMEByToken(token string) (StoryToken, error)  {
+type DayOfMail struct {
+	DayOfMail int `db:"DAYOFMAIL"`
+}
+
+func GetCREATEDDATETIMEByToken(token string) (StoryToken, error) {
 
 	config.Config.LOGGER.Info(token)
 	storyToken := StoryToken{}
-	err := config.Config.DB.Get(&storyToken, "SELECT GUIDTOKEN, GUIDDATETIME, JOURNALID, TYPEOPERATION, APPROVED  from [AxSprav].[dbo].ZSIGNATUREHISTORYTOKEN where GUIDTOKEN=@p1", token)
+	err := config.Config.DB.Get(&storyToken, "SELECT GUIDTOKEN, GUIDDATETIME, JOURNALID, TYPEOPERATION, APPROVED, JournalIdCompTrans  from [AxSprav].[dbo].ZSIGNATUREHISTORYTOKEN where GUIDTOKEN=@p1", token)
 
 	if err != nil {
 		return StoryToken{}, err
@@ -28,8 +32,19 @@ func GetCREATEDDATETIMEByToken(token string) (StoryToken, error)  {
 	return storyToken, nil
 }
 
-func UpdateInventJournal(storyToken StoryToken) (int, error)  {
+func GetDayOfMail() (DayOfMail, error) {
 
+	dayOfMail := DayOfMail{}
+	err := config.Config.DB.Get(&dayOfMail, "select DAYOFMAIL from [AxSprav].[dbo].InventParameters where DATAAREAID = 'ref'")
+
+	if err != nil {
+		return DayOfMail{}, err
+	}
+
+	return dayOfMail, nil
+}
+
+func UpdateInventJournal(storyToken StoryToken) (int, error) {
 
 	log.Println(storyToken.TYPEOPERATION)
 
@@ -37,27 +52,28 @@ func UpdateInventJournal(storyToken StoryToken) (int, error)  {
 		return 0, errors.New("undefined type in TYPEOPERATION")
 	}
 
-	if storyToken.TYPEOPERATION == "receive"{
+	if storyToken.TYPEOPERATION == "receive" {
 		_, err := config.Config.DB.Exec("UPDATE  [AxSprav].[dbo].[INVENTJOURNALTABLE] SET   [JOURNALCHEKMOLTO] = 1 where [AxSprav].[dbo].[INVENTJOURNALTABLE].JOURNALID =@p1", storyToken.JOURNALID)
 
-		if err != nil{
+		if err != nil {
 			return 0, err
 		}
+
 	}
 
-	if storyToken.TYPEOPERATION == "transfer"{
+	if storyToken.TYPEOPERATION == "transfer" {
 		_, err := config.Config.DB.Exec("UPDATE  [AxSprav].[dbo].[INVENTJOURNALTABLE] SET   [JOURNALCHEKMOLFROM] = 1 where [AxSprav].[dbo].[INVENTJOURNALTABLE].JOURNALID =@p1", storyToken.JOURNALID)
 
-		if err != nil{
+		if err != nil {
 			return 0, err
 		}
 	}
 
 	_, err := config.Config.DB.Exec("UPDATE  [AxSprav].[dbo].ZSIGNATUREHISTORYTOKEN SET  [APPROVEDDATETIME] = @p1, [APPROVED] = 1, [OperationStatus] = 'Успешно' where GUIDTOKEN=@p2", time.Now(), storyToken.GUID)
 
-	if err != nil{
+	if err != nil {
 		return 0, err
 	}
 
-return 200, nil
+	return 200, nil
 }
